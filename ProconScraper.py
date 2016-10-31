@@ -23,35 +23,47 @@ class ProconScraper(object):
         if not exists(outFolder):
             makedirs(outFolder)
 
-    def requestPage(self, url):
-        request = urllib2.Request(url, None, {
-            'User-Agent': 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.9.0.7) Gecko/2009021910 Firefox/3.0.7'})
-        try:
-            print 'request ' + url
-            document = urllib2.urlopen(request).read()
-        except urllib2.HTTPError, err:
-            if err.code == 503:
-                print "################################################# 503 #################################################"
-                time.sleep(30)
-                document = request(url)
-            else:
-                raise
-        return document
-
-    def getCommentPage(self, petitionID):
-        petitionPage = self.requestPage("http://" + petitionID + "." + self.rootUrl)
+    def getArgumentPageUrl(self, petitionID):
+        petitionPage = requestPage("http://" + petitionID + "." + self.rootUrl)
 
         soup = BS(petitionPage.decode('utf-8', 'ignore'), "html5lib")
-        # soup = BS(petitionPage, "html.parser")
         aList = soup.select('td#introtext > div > table > tbody > tr > td > table > tbody > tr > td > a')
         url = filter(lambda x: x.text == "Comments", aList)[0]['href']
-        # aList = soup.select('html body')
-        return self.requestPage(url)
+        return url
+
+def requestPage(url):
+    request = urllib2.Request(url, None, {
+        'User-Agent': 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.9.0.7) Gecko/2009021910 Firefox/3.0.7'})
+    try:
+        print 'request ' + url
+        document = urllib2.urlopen(request).read()
+    except urllib2.HTTPError, err:
+        if err.code == 503:
+            print "################################################# 503 #################################################"
+            time.sleep(30)
+            document = request(url)
+        else:
+            raise
+    return document
+
+def getArguments(url):
+    page = requestPage(url)
+    soup = BS(page.decode('utf-8', 'ignore'), "html5lib")
+    proArgList = soup.select('div#comments-container > div.pro > ul.comments > li.comment')
+    conArgList = soup.select('div#comments-container > div.con > ul.comments > li.comment')
+    return {'pro': [extractArgumentData(arg) for arg in proArgList], 'con': [extractArgumentData(arg) for arg in conArgList]}
+
+def extractArgumentData(argElem):
+    result = {'content': argElem.select('div.contents > blockquote')[0].text}
+    replies = argElem.select('div.reply-replies > ul.replies > li.reply')
+    result['replies'] = [reply.select('div.contents > blockquote')[0].text for reply in replies]
+    return result
 
 
 def main():
     f = ProconScraper("procon.org", "out")
-    commentPage =f.getCommentPage("medicalmarijuana")
+    commentPageUrl = f.getArgumentPageUrl("medicalmarijuana")
+    args = getArguments(commentPageUrl)
     print "as"
     # f.processSections(["in_zeichnung", "in_bearbeitung", "erfolg", "beendet", "misserfolg", "gesperrt"])
 

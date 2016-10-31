@@ -5,12 +5,13 @@ import urllib2  # get pages
 # from fake_useragent import UserAgent # change user agent
 import time  # to respect page rules
 from bs4 import BeautifulSoup as BS
-# import pprint
+import pprint
 import json
 import io
 from os import listdir, makedirs
 from os.path import isfile, join, exists
 import html5lib # needed for (very) lenient parsing
+import re
 
 __author__ = 'Arne Binder'
 
@@ -23,13 +24,19 @@ class ProconScraper(object):
         if not exists(outFolder):
             makedirs(outFolder)
 
-    def getArgumentPageUrl(self, petitionID):
-        petitionPage = requestPage("http://" + petitionID + "." + self.rootUrl)
+def getQuestionID(petitionID):
+    petitionPage = requestPage("http://" + petitionID + ".procon.org")
 
-        soup = BS(petitionPage.decode('utf-8', 'ignore'), "html5lib")
-        aList = soup.select('td#introtext > div > table > tbody > tr > td > table > tbody > tr > td > a')
-        url = filter(lambda x: x.text == "Comments", aList)[0]['href']
-        return url
+    soup = BS(petitionPage.decode('utf-8', 'ignore'), "html5lib")
+
+    expr = re.compile(petitionID + "\.procon\.org/view\.answers\.php\?questionID=(\d+)")
+    aLink = soup.find(href=expr)
+    return expr.search(aLink['href']).group(1)
+
+def getArguments(issueID):
+    questionID = getQuestionID(issueID)
+    return extractArguments(
+        "http://" + issueID + ".procon.org/view.answers.reader-comments.php?questionID=" + questionID)
 
 def requestPage(url):
     request = urllib2.Request(url, None, {
@@ -46,7 +53,7 @@ def requestPage(url):
             raise
     return document
 
-def getArguments(url):
+def extractArguments(url):
     page = requestPage(url)
     soup = BS(page.decode('utf-8', 'ignore'), "html5lib")
     proArgList = soup.select('div#comments-container > div.pro > ul.comments > li.comment')
@@ -59,19 +66,46 @@ def extractArgumentData(argElem):
     result['replies'] = [reply.select('div.contents > blockquote')[0].text for reply in replies]
     return result
 
+def extractIssueURLs():
+    mainURL = "http://www.procon.org/debate-topics.php"
+    page = requestPage(mainURL)
+    soup = BS(page.decode('utf-8', 'ignore'), "html5lib")
+    # aList = soup.select('')
+    # expr = re.compile("http://([^\.]+)\.procon\.org/view\.answers\.php\?questionID=(\d+)")
+    expr = re.compile("([^\.]+)\.procon\.org/view\.answers\.php\?questionID=(\d+)")
+    aLinkList = soup.find_all(href=expr)
+
+    result = []
+    for a in aLinkList:
+        m = expr.search(a['href'])
+        result.append("http://" + m.group(1) + ".procon.org/view.answers.reader-comments.php?questionID=" + m.group(2))
+
+    # aList1Refs = [a['href'] for a in aLinkList]
+
+    # aList2 = [a for a in soup("a") if a.text == "Top Pro & Con Quotes"]
+    # aList2Refs = [a['href'] for a in aList2]
+    return result
+
+    # http://undergod.procon.org/view.answers.php?questionID=1330
 
 def main():
-    f = ProconScraper("procon.org", "out")
-    commentPageUrl = f.getArgumentPageUrl("medicalmarijuana")
-    args = getArguments(commentPageUrl)
-    print "as"
+    # f = ProconScraper("procon.org", "out")
+
+    # args = getArguments("climatechange")
+
+    args = []
+    # commentPageUrl = f.getArgumentPageUrl("climatechange")
+    # args = getArguments(commentPageUrl)
+
+
+    # print "as"
     # f.processSections(["in_zeichnung", "in_bearbeitung", "erfolg", "beendet", "misserfolg", "gesperrt"])
 
-    # pp = pprint.PrettyPrinter(indent=4)
+    pp = pprint.PrettyPrinter(indent=4)
     # id = "sind-vaeter-die-besseren-muetter-das-wechselmodell-als-standard-in-deutschland"
     # ids = f.extractAllPetitionIDs("in_zeichnung")
     # data = f.extractPartitionData(id)
-    # pp.pprint(ids)
+    pp.pprint(extractIssueURLs())
     # writeJsonData(data, "test")
 
 

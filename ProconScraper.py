@@ -2,27 +2,18 @@
 # coding: utf-8
 
 import urllib2  # get pages
-# from fake_useragent import UserAgent # change user agent
 import time  # to respect page rules
 from bs4 import BeautifulSoup as BS
 import pprint
 import json
 import io
-from os import listdir, makedirs
-from os.path import isfile, join, exists
+from os import makedirs
+from os.path import join, exists
 import html5lib # needed for (very) lenient parsing
 import re
 
 __author__ = 'Arne Binder'
 
-
-class ProconScraper(object):
-    def __init__(self, rootUrl, outFolder):
-        self.rootUrl = rootUrl  # like "https://www.openpetition.de"
-        self.outFolder = outFolder
-        # create output folder if necessary
-        if not exists(outFolder):
-            makedirs(outFolder)
 
 def getQuestionID(petitionID):
     petitionPage = requestPage("http://" + petitionID + ".procon.org")
@@ -58,7 +49,9 @@ def extractArguments(url):
     soup = BS(page.decode('utf-8', 'ignore'), "html5lib")
     proArgList = soup.select('div#comments-container > div.pro > ul.comments > li.comment')
     conArgList = soup.select('div#comments-container > div.con > ul.comments > li.comment')
-    return {'pro': [extractArgumentData(arg) for arg in proArgList], 'con': [extractArgumentData(arg) for arg in conArgList]}
+    m = re.search('http://([^^.]+)', url)
+
+    return {'id': m.group(1), 'pro': [extractArgumentData(arg) for arg in proArgList], 'con': [extractArgumentData(arg) for arg in conArgList]}
 
 def extractArgumentData(argElem):
     result = {'content': argElem.select('div.contents > blockquote')[0].text}
@@ -70,9 +63,7 @@ def extractIssueURLs():
     mainURL = "http://www.procon.org/debate-topics.php"
     page = requestPage(mainURL)
     soup = BS(page.decode('utf-8', 'ignore'), "html5lib")
-    # aList = soup.select('')
-    # expr = re.compile("http://([^\.]+)\.procon\.org/view\.answers\.php\?questionID=(\d+)")
-    expr = re.compile("([^\.]+)\.procon\.org/view\.answers\.php\?questionID=(\d+)")
+    expr = re.compile("http://([^\.]+)\.procon\.org/view\.answers\.php\?questionID=(\d+)")
     aLinkList = soup.find_all(href=expr)
 
     result = []
@@ -80,33 +71,34 @@ def extractIssueURLs():
         m = expr.search(a['href'])
         result.append("http://" + m.group(1) + ".procon.org/view.answers.reader-comments.php?questionID=" + m.group(2))
 
-    # aList1Refs = [a['href'] for a in aLinkList]
-
-    # aList2 = [a for a in soup("a") if a.text == "Top Pro & Con Quotes"]
-    # aList2Refs = [a['href'] for a in aList2]
     return result
 
-    # http://undergod.procon.org/view.answers.php?questionID=1330
+def writeJsonData(data, path):
+    with io.open(path + '.json', 'w', encoding='utf8') as json_file:
+        out = json.dumps(data, ensure_ascii=False)
+        # unicode(data) auto-decodes data to unicode if str
+        json_file.write(unicode(out))
 
 def main():
     # f = ProconScraper("procon.org", "out")
+    outFolder = "out"
 
-    # args = getArguments("climatechange")
+    if not exists(outFolder):
+        makedirs(outFolder)
 
-    args = []
-    # commentPageUrl = f.getArgumentPageUrl("climatechange")
-    # args = getArguments(commentPageUrl)
+    urls = extractIssueURLs()
 
+    failedUrls = []
 
-    # print "as"
-    # f.processSections(["in_zeichnung", "in_bearbeitung", "erfolg", "beendet", "misserfolg", "gesperrt"])
+    for url in urls:
+        try:
+            data = extractArguments(url)
+            writeJsonData(data, join(outFolder, data['id']))
+        except:
+            failedUrls.append(url)
 
-    pp = pprint.PrettyPrinter(indent=4)
-    # id = "sind-vaeter-die-besseren-muetter-das-wechselmodell-als-standard-in-deutschland"
-    # ids = f.extractAllPetitionIDs("in_zeichnung")
-    # data = f.extractPartitionData(id)
-    pp.pprint(extractIssueURLs())
-    # writeJsonData(data, "test")
+    writeJsonData(failedUrls, "FAILED")
+
 
 
 if __name__ == "__main__":

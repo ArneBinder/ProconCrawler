@@ -4,7 +4,6 @@
 import urllib2  # get pages
 import time  # to respect page rules
 from bs4 import BeautifulSoup as BS
-import pprint
 import json
 import io
 from os import makedirs

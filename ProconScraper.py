@@ -8,7 +8,7 @@ import json
 import io
 from os import makedirs
 from os.path import join, exists
-import html5lib # needed for (very) lenient parsing
+import html5lib  # needed for (very) lenient parsing
 import re
 
 __author__ = 'Arne Binder'
@@ -23,10 +23,12 @@ def getQuestionID(petitionID):
     aLink = soup.find(href=expr)
     return expr.search(aLink['href']).group(1)
 
+
 def getArguments(issueID):
     questionID = getQuestionID(issueID)
     return extractArguments(
         "http://" + issueID + ".procon.org/view.answers.reader-comments.php?questionID=" + questionID)
+
 
 def requestPage(url):
     request = urllib2.Request(url, None, {
@@ -43,20 +45,46 @@ def requestPage(url):
             raise
     return document
 
-def extractArguments(url):
+
+def extractArguments((url, debateID)):
     page = requestPage(url)
     soup = BS(page.decode('utf-8', 'ignore'), "html5lib")
+
+    searchUrl = 'http://'+debateID+'\.procon\.org/?'
+    question = soup.find("a", href=re.compile(searchUrl), title=re.compile(".*"))['title']
+
+    '''
+    # extract question and topic from title and meta description
+    title = soup.select('html > head > title')[0].text
+    contentDesc = soup.select('html > head > meta[name=description]')[0]['content']
+    titleSuffix = u' - Reader Comments - ProCon.org'
+    contentDescSuffix = u' Read pros, cons, and expert responses in the debate.'
+    if title[-len(titleSuffix):] == titleSuffix and contentDesc[-len(contentDescSuffix):] == contentDescSuffix:
+        title = title[:-len(titleSuffix)]
+        contentDesc = contentDesc[:-len(contentDescSuffix)]
+        topic = title[len(contentDesc) + 3:]
+    else:
+        raise Exception(
+            'The title = "' + title + '" does not end with the expected title suffix = "' + titleSuffix
+            + '" or the content description = "' + contentDesc
+            + '" does not end with the expected content description suffix = "' + contentDescSuffix + '"')
+    '''
+
     proArgList = soup.select('div#comments-container > div.pro > ul.comments > li.comment')
     conArgList = soup.select('div#comments-container > div.con > ul.comments > li.comment')
     m = re.search('http://([^^.]+)', url)
 
-    return {'id': m.group(1), 'pro': [extractArgumentData(arg) for arg in proArgList], 'con': [extractArgumentData(arg) for arg in conArgList]}
+    return {'id': m.group(1), 'question': question,
+            'pro': [extractArgumentData(arg) for arg in proArgList],
+            'con': [extractArgumentData(arg) for arg in conArgList]}
+
 
 def extractArgumentData(argElem):
     result = {'content': argElem.select('div.contents > blockquote')[0].text}
     replies = argElem.select('div.reply-replies > ul.replies > li.reply')
     result['replies'] = [reply.select('div.contents > blockquote')[0].text for reply in replies]
     return result
+
 
 def extractIssueURLs():
     mainURL = "http://www.procon.org/debate-topics.php"
@@ -68,15 +96,17 @@ def extractIssueURLs():
     result = []
     for a in aLinkList:
         m = expr.search(a['href'])
-        result.append("http://" + m.group(1) + ".procon.org/view.answers.reader-comments.php?questionID=" + m.group(2))
+        result.append(("http://" + m.group(1) + ".procon.org/view.answers.reader-comments.php?questionID=" + m.group(2), m.group(1)))
 
     return result
+
 
 def writeJsonData(data, path):
     with io.open(path + '.json', 'w', encoding='utf8') as json_file:
         out = json.dumps(data, ensure_ascii=False)
         # unicode(data) auto-decodes data to unicode if str
         json_file.write(unicode(out))
+
 
 def main():
     # f = ProconScraper("procon.org", "out")
@@ -97,7 +127,6 @@ def main():
             failedUrls.append(url)
 
     writeJsonData(failedUrls, "FAILED")
-
 
 
 if __name__ == "__main__":

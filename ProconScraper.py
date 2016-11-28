@@ -75,14 +75,23 @@ def extractArguments((url, debateID)):
     m = re.search('http://([^^.]+)', url)
 
     return {'id': m.group(1), 'question': question,
-            'pro': [extractArgumentData(arg) for arg in proArgList],
-            'con': [extractArgumentData(arg) for arg in conArgList]}
+            'pro': [extractArgument(arg) for arg in proArgList],
+            'con': [extractArgument(arg) for arg in conArgList]}
 
+
+def extractArgument(argElem):
+    result = extractArgumentData(argElem)
+    replies = argElem.select('div.reply-replies > ul.replies > li.reply')
+    result['replies'] = [extractArgumentData(reply) for reply in replies]
+    return result
 
 def extractArgumentData(argElem):
-    result = {'content': argElem.select('div.contents > blockquote')[0].text}
-    replies = argElem.select('div.reply-replies > ul.replies > li.reply')
-    result['replies'] = [reply.select('div.contents > blockquote')[0].text for reply in replies]
+    result = {}
+    result['content'] = argElem.select('div.contents > blockquote')[0].text
+    result['votesUp'] = argElem.select('div.contents > div.info > span.votes-up > a.votes-up')[0].text
+    result['votesDown'] = argElem.select('div.contents > div.info > span.votes-down > a.votes-down')[0].text
+    result['votesUp'] = result['votesUp'][1:]
+    result['votesDown'] = result['votesDown'][1:]
     return result
 
 
